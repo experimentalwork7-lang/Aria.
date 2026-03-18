@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ARIA — Autonomous Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;900&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#04050a;--s1:#080c14;--s2:#0e1520;--s3:#141d2e;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --a1:#3b82f6;--a2:#8b5cf6;--a3:#06b6d4;--a4:#10b981;--a5:#f59e0b;
+  --red:#ef4444;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'Outfit',sans-serif;color:var(--text);display:flex;flex-direction:column;max-width:480px;margin:0 auto;position:relative}
+.mesh{position:fixed;inset:0;pointer-events:none;z-index:0;background:
+  radial-gradient(ellipse 80% 50% at 20% -10%,rgba(59,130,246,0.08) 0%,transparent 60%),
+  radial-gradient(ellipse 60% 40% at 80% 110%,rgba(139,92,246,0.07) 0%,transparent 60%)}
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,0.006) 3px,rgba(255,255,255,0.006) 4px)}
+.header{position:relative;z-index:50;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px 12px;border-bottom:1px solid var(--border);
+  background:rgba(4,5,10,0.92);backdrop-filter:blur(24px);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--a1),var(--a2));
+  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;
+  box-shadow:0 0 16px rgba(59,130,246,0.3)}
+.logo-text{font-weight:900;font-size:20px;letter-spacing:-0.5px;
+  background:linear-gradient(90deg,#fff 0%,rgba(255,255,255,0.6) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:1px;font-family:'Fira Code',monospace}
+.agent-status{display:flex;align-items:center;gap:6px}
+.status-ring{width:28px;height:28px;border-radius:50%;border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center}
+.status-ring.idle{border-color:rgba(100,116,139,0.4)}
+.status-ring.thinking{border-color:var(--a1);animation:ringPulse 1.2s ease infinite}
+.status-ring.working{border-color:var(--a4);animation:ringPulse 0.8s ease infinite}
+.status-ring.done{border-color:var(--a4)}
+.status-ring.error{border-color:var(--red)}
+@keyframes ringPulse{0%,100%{box-shadow:0 0 0 0 currentColor;opacity:1}50%{box-shadow:0 0 0 4px transparent;opacity:0.7}}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background 0.3s}
+.status-ring.thinking .status-dot{background:var(--a1);animation:blink 0.6s ease infinite alternate}
+.status-ring.working .status-dot{background:var(--a4);animation:blink 0.4s ease infinite alternate}
+.status-ring.done .status-dot{background:var(--a4)}
+.status-ring.error .status-dot{background:var(--red)}
+@keyframes blink{from{opacity:1}to{opacity:0.2}}
+#statusText{font-size:10px;color:var(--muted);font-family:'Fira Code',monospace}
+.main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;z-index:1}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);background:rgba(4,5,10,0.8);flex-shrink:0}
+.tab-btn{flex:1;padding:10px 4px;font-size:10px;font-family:'Fira Code',monospace;letter-spacing:0.5px;
+  color:var(--muted);background:transparent;border:none;cursor:pointer;
+  border-bottom:2px solid transparent;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tab-btn .ti{font-size:16px}
+.tab-btn.active{color:var(--a1);border-bottom-color:var(--a1)}
+.page{display:none;flex-direction:column;flex:1;overflow:hidden}
+.page.active{display:flex}
+.agent-view{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth}
+.agent-view::-webkit-scrollbar{width:3px}
+.agent-view::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.goal-card{background:var(--s1);border:1px solid var(--border);border-radius:18px;padding:14px;transition:border-color 0.3s}
+.goal-card:focus-within{border-color:rgba(59,130,246,0.4);box-shadow:0 0 0 1px rgba(59,130,246,0.08)}
+.goal-label{font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;font-family:'Fira Code',monospace}
+.goal-input{width:100%;background:transparent;border:none;outline:none;color:var(--text);
+  font-family:'Outfit',sans-serif;font-size:15px;line-height:1.5;resize:none;min-height:52px;max-height:120px}
+.goal-input::placeholder{color:var(--muted)}
+.goal-footer{display:flex;align-items:center;margin-top:10px;gap:8px}
+.suggestion-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.chip{font-size:10px;padding:4px 10px;border-radius:20px;background:var(--s2);border:1px solid var(--border2);
+  color:var(--muted2);cursor:pointer;transition:all 0.15s;white-space:nowrap;user-select:none}
+.chip:active{background:var(--s3);transform:scale(0.95)}
+.run-btn{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--a1),var(--a2));
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;transition:all 0.2s;box-shadow:0 4px 16px rgba(59,130,246,0.3);color:#fff}
+.run-btn:active{transform:scale(0.92)}
+.run-btn.stop{background:linear-gradient(135deg,var(--red),#b91c1c);box-shadow:0 4px 16px rgba(239,68,68,0.3)}
+.execution-stream{display:flex;flex-direction:column;gap:10px}
+.plan-card{background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden;animation:fadeUp 0.3s ease both}
+.plan-header{padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);background:rgba(59,130,246,0.04)}
+.plan-header-icon{font-size:14px}
+.plan-header-title{font-size:12px;font-weight:600;color:var(--a1);flex:1}
+.plan-header-count{font-size:10px;color:var(--muted);font-family:'Fira Code',monospace}
+.plan-steps{padding:8px;display:flex;flex-direction:column;gap:4px}
+.plan-step{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+  background:var(--s2);transition:all 0.3s;animation:stepIn 0.3s ease both;border:1px solid transparent}
+@keyframes stepIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.plan-step.active{background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.2)}
+.plan-step.done{background:rgba(16,185,129,0.06);border-color:rgba(16,185,129,0.15)}
+.plan-step.error{background:rgba(239,68,68,0.06);border-color:rgba(239,68,68,0.15)}
+.step-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;flex-shrink:0;border:1px solid var(--border2);background:var(--s3);
+  font-family:'Fira Code',monospace;font-weight:500;color:var(--muted);transition:all 0.3s}
+.plan-step.active .step-icon{background:rgba(59,130,246,0.15);border-color:var(--a1);color:var(--a1)}
+.plan-step.done .step-icon{background:rgba(16,185,129,0.15);border-color:var(--a4);color:var(--a4)}
+.plan-step.error .step-icon{background:rgba(239,68,68,0.15);border-color:var(--red);color:var(--red)}
+.step-text{font-size:12px;font-weight:500;flex:1;line-height:1.4}
+.step-tag{font-size:9px;padding:2px 7px;border-radius:10px;font-family:'Fira Code',monospace;letter-spacing:0.5px;flex-shrink:0}
+.tag-research{background:rgba(6,182,212,0.15);color:var(--a3)}
+.tag-discord{background:rgba(139,92,246,0.15);color:var(--a2)}
+.tag-write{background:rgba(245,158,11,0.15);color:var(--a5)}
+.tag-send{background:rgba(16,185,129,0.15);color:var(--a4)}
+.tag-think{background:rgba(59,130,246,0.15);color:var(--a1)}
+.thought-block{background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--a1);
+  border-radius:12px;padding:12px 14px;animation:fadeLeft 0.3s ease both}
+@keyframes fadeLeft{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.thought-label{font-size:9px;font-family:'Fira Code',monospace;letter-spacing:1.5px;color:var(--a1);
+  margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.thought-text{font-size:13px;color:var(--muted2);line-height:1.6}
+.typing{display:flex;gap:3px;align-items:center}
+.typing span{width:5px;height:5px;border-radius:50%;background:var(--a1);animation:typeDot 1s ease infinite}
+.typing span:nth-child(2){animation-delay:0.15s}
+.typing span:nth-child(3){animation-delay:0.3s}
+@keyframes typeDot{0%,60%,100%{opacity:0.2;transform:scale(0.7)}30%{opacity:1;transform:scale(1)}}
+.tool-block{background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--a3);
+  border-radius:12px;overflow:hidden;animation:fadeLeft 0.3s ease both}
+.tool-header{padding:9px 12px;background:rgba(6,182,212,0.04);display:flex;align-items:center;gap:8px;
+  font-size:11px;font-family:'Fira Code',monospace;color:var(--a3);cursor:pointer;user-select:none}
+.tool-content{padding:10px 12px;font-size:12px;line-height:1.75;color:var(--muted2);
+  border-top:1px solid var(--border);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto}
+.discord-block{background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--a2);
+  border-radius:12px;overflow:hidden;animation:fadeLeft 0.3s ease both}
+.discord-header{padding:9px 12px;background:rgba(139,92,246,0.04);display:flex;align-items:center;gap:8px;
+  font-size:11px;font-family:'Fira Code',monospace;color:var(--a2)}
+.discord-content{padding:12px;font-size:13px;line-height:1.7;color:var(--text);
+  border-top:1px solid var(--border);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto}
+.discord-actions{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border)}
+.action-btn{flex:1;padding:9px 8px;border-radius:8px;border:1px solid var(--border2);background:transparent;
+  color:var(--text);font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;transition:all 0.15s;
+  display:flex;align-items:center;justify-content:center;gap:4px}
+.action-btn:active{transform:scale(0.96)}
+.action-btn.primary{background:var(--a2);border-color:var(--a2);font-weight:600;color:#fff}
+.action-btn.sent{background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.3);color:var(--a4);font-weight:600}
+.result-card{background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);
+  border-radius:14px;padding:14px;animation:fadeUp 0.3s ease both}
+.result-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.result-title{font-size:13px;font-weight:700;color:var(--a4)}
+.result-body{font-size:12px;color:var(--muted2);line-height:1.7}
+.error-card{background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);
+  border-radius:14px;padding:14px;animation:fadeUp 0.3s ease both;font-size:12px;color:#fca5a5;line-height:1.7}
+.error-title{font-size:11px;font-family:'Fira Code',monospace;color:var(--red);margin-bottom:6px;letter-spacing:1px}
+/* DISCORD PAGE */
+.discord-page{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.dc-setup{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.dc-field{margin-bottom:8px}
+.field-label{font-size:9px;letter-spacing:1.5px;color:var(--muted);font-family:'Fira Code',monospace;margin-bottom:5px;display:block}
+input[type="text"],input[type="password"],textarea,select{
+  width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:10px;
+  padding:9px 12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s}
+input:focus,textarea:focus,select:focus{border-color:var(--a1)}
+textarea{resize:vertical}
+select option{background:var(--s2)}
+.dc-log{flex:1;overflow-y:auto;padding:12px 16px}
+.dc-empty{font-size:11px;color:var(--muted);text-align:center;padding:24px 0;font-family:'Fira Code',monospace;line-height:2}
+.channel-item{display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--s1);
+  border:1px solid var(--border);border-radius:12px;margin-bottom:8px}
+.channel-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.channel-info{flex:1;min-width:0}
+.channel-name{font-size:12px;font-weight:600;margin-bottom:3px}
+.channel-preview{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.channel-time{font-size:10px;color:var(--muted);font-family:'Fira Code',monospace;flex-shrink:0}
+.send-bar{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);background:rgba(4,5,10,0.9);flex-shrink:0}
+.msg-input{flex:1;background:var(--s2);border:1px solid var(--border2);border-radius:24px;
+  padding:10px 16px;color:var(--text);font-size:13px;font-family:'Outfit',sans-serif;outline:none}
+.msg-input:focus{border-color:var(--a2)}
+.send-icon-btn{width:42px;height:42px;border-radius:50%;background:var(--a2);border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff;transition:transform 0.15s}
+.send-icon-btn:active{transform:scale(0.9)}
+/* SETTINGS */
+.settings-scroll{flex:1;overflow-y:auto;padding:16px}
+.settings-section{margin-bottom:20px}
+.settings-title{font-size:9px;letter-spacing:2px;color:var(--muted);font-family:'Fira Code',monospace;
+  text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.settings-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.settings-card{background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.settings-row{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.settings-row:last-child{border-bottom:none}
+.settings-row-info{flex:1}
+.settings-row-label{font-size:13px;font-weight:500;margin-bottom:2px}
+.settings-row-sub{font-size:11px;color:var(--muted)}
+.sw{width:44px;height:24px;border-radius:12px;background:var(--s3);border:1px solid var(--border2);
+  position:relative;cursor:pointer;transition:background 0.25s;flex-shrink:0}
+.sw.on{background:var(--a4);border-color:var(--a4)}
+.sw::after{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:white;
+  top:2px;left:2px;transition:left 0.25s;box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+.sw.on::after{left:22px}
+.info-box{background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.15);
+  border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted2);line-height:1.9}
+.hl{color:var(--a1);font-weight:600}
+.hl-green{color:var(--a4);font-weight:600}
+.model-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(16,185,129,0.1);
+  border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:3px 10px;
+  font-size:10px;color:var(--a4);font-family:'Fira Code',monospace;margin-top:4px}
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);
+  background:var(--s2);border:1px solid var(--border2);border-radius:24px;padding:10px 20px;
+  font-size:13px;z-index:9999;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  white-space:nowrap;max-width:90vw;text-align:center;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:rgba(16,185,129,0.4);color:var(--a4)}
+.toast.error{border-color:rgba(239,68,68,0.4);color:#fca5a5}
+</style>
+</head>
+<body>
+<div class="mesh"></div>
+<div class="scanlines"></div>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">🤖</div>
+    <div>
+      <div class="logo-text">ARIA</div>
+      <div class="logo-sub">AUTONOMOUS AGENT</div>
+    </div>
+  </div>
+  <div class="agent-status">
+    <div class="status-ring idle" id="statusRing"><div class="status-dot"></div></div>
+    <span id="statusText">IDLE</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showPage('agent',this)"><span class="ti">⚡</span>AGENT</button>
+    <button class="tab-btn" onclick="showPage('discord',this)"><span class="ti">💬</span>DISCORD</button>
+    <button class="tab-btn" onclick="showPage('settings',this)"><span class="ti">⚙️</span>SETTINGS</button>
+  </div>
+
+  <!-- AGENT PAGE -->
+  <div class="page active" id="page-agent">
+    <div class="agent-view" id="agentView">
+      <div class="goal-card">
+        <div class="goal-label">▸ GIVE ARIA A GOAL</div>
+        <textarea class="goal-input" id="goalInput" rows="3"
+          placeholder="e.g. Research the top 5 AI tools released this week and post a summary to my Discord server..."></textarea>
+        <div class="goal-footer">
+          <div class="suggestion-chips">
+            <div class="chip" onclick="setGoal('Research top 5 AI tools released this week and write a Discord summary post')">🔍 AI Research</div>
+            <div class="chip" onclick="setGoal('Find AI developers in Discord and write personalized DM outreach messages for my open-source AI agent project called ARIA')">🎯 Find Leads</div>
+            <div class="chip" onclick="setGoal('Write an engaging weekly AI news digest formatted for Discord with emojis and clear sections')">📢 Weekly Digest</div>
+          </div>
+          <button class="run-btn" id="runBtn" onclick="toggleAgent()">▶</button>
+        </div>
+      </div>
+      <div class="execution-stream" id="execStream"></div>
+    </div>
+  </div>
+
+  <!-- DISCORD PAGE -->
+  <div class="page" id="page-discord">
+    <div class="discord-page">
+      <div class="dc-setup">
+        <div class="dc-field">
+          <label class="field-label">DISCORD WEBHOOK URL</label>
+          <input type="password" id="webhookUrl" placeholder="https://discord.com/api/webhooks/..." oninput="save()">
+        </div>
+        <div class="dc-field" style="margin-bottom:0">
+          <label class="field-label">CHANNEL NAME (label only)</label>
+          <input type="text" id="channelName" placeholder="#ai-updates" oninput="save()">
+        </div>
+      </div>
+      <div class="dc-log" id="dcLog">
+        <div class="dc-empty" id="dcEmpty">Configure webhook above.<br>Messages sent by ARIA appear here.</div>
+      </div>
+      <div class="send-bar">
+        <input class="msg-input" id="manualMsg" placeholder="Send manually to Discord..."
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();manualSend()}">
+        <button class="send-icon-btn" onclick="manualSend()">→</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="page-settings">
+    <div class="settings-scroll">
+
+      <div class="settings-section">
+        <div class="settings-title">AI Configuration</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">OpenRouter API Key</div>
+              <div class="settings-row-sub">Free at openrouter.ai — no credit card</div>
+              <div class="model-badge">✓ No CORS · Works on phone</div>
+            </div>
+          </div>
+          <div style="padding:0 14px 12px">
+            <input type="password" id="apiKey" placeholder="sk-or-v1-..." oninput="save()">
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Model</div>
+              <div class="settings-row-sub">All options are 100% free</div>
+            </div>
+            <select id="modelSelect" onchange="save()" style="width:auto;padding:6px 8px;font-size:11px;border-radius:8px">
+              <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash</option>
+              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
+              <option value="mistralai/mistral-7b-instruct:free">Mistral 7B</option>
+              <option value="deepseek/deepseek-r1:free">DeepSeek R1</option>
+            </select>
+          </div>
+          <div class="settings-row" style="cursor:pointer" onclick="testConnection()">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Test Connection</div>
+              <div class="settings-row-sub" id="testResult">Tap to verify key</div>
+            </div>
+            <span style="color:var(--a1);font-size:20px">→</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">Agent Behaviour</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Show thinking steps</div>
+              <div class="settings-row-sub">Display reasoning in real time</div>
+            </div>
+            <div class="sw on" id="sw-think" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Auto-post to Discord</div>
+              <div class="settings-row-sub">Skip review, post directly</div>
+            </div>
+            <div class="sw" id="sw-auto" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">Agent Persona</div>
+        <textarea id="agentPersona" rows="4" style="border-radius:14px"
+          placeholder="You are ARIA, an autonomous AI agent. You help find Discord leads, research AI tools, and post updates. Be sharp, concise, and use Discord markdown." oninput="save()"></textarea>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">Setup Guide</div>
+        <div class="info-box">
+          <span class="hl">Step 1 — Get free API key:</span><br>
+          → openrouter.ai → Sign up → Keys → Create Key<br>
+          → Copy key (starts with sk-or-v1-) → Paste above<br><br>
+          <span class="hl">Step 2 — Discord webhook:</span><br>
+          → Your server → Settings → Integrations → Webhooks<br>
+          → New Webhook → Copy URL → paste in Discord tab<br><br>
+          <span class="hl-green">Step 3 — Tap Test Connection ✓</span><br>
+          Then go to Agent tab and type your goal!
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">Install as Android App</div>
+        <div class="info-box">
+          Open in <span class="hl">Chrome</span> on your phone →<br>
+          Tap <span class="hl">⋮ → Add to Home Screen</span><br>
+          ARIA runs fullscreen like a native app 📱
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════
+// STATE
+// ═══════════════════════════════════
+let isRunning = false;
+let stopRequested = false;
+
+// ═══════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════
+const KEYS = ['apiKey','webhookUrl','channelName','agentPersona','modelSelect'];
+
+function save() {
+  KEYS.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) localStorage.setItem('aria2_' + k, el.value);
+  });
+}
+
+function load() {
+  KEYS.forEach(k => {
+    const el = document.getElementById(k);
+    const v = localStorage.getItem('aria2_' + k);
+    if (el && v !== null) el.value = v;
+  });
+}
+
+load();
+
+// ═══════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════
+function showPage(page, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  btn.classList.add('active');
+}
+
+function setGoal(text) {
+  document.getElementById('goalInput').value = text;
+  // Switch to agent tab
+  const agentBtn = document.querySelector('.tab-btn');
+  showPage('agent', agentBtn);
+}
+
+// ═══════════════════════════════════
+// STATUS BAR
+// ═══════════════════════════════════
+function setStatus(state, text) {
+  document.getElementById('statusRing').className = 'status-ring ' + state;
+  const el = document.getElementById('statusText');
+  el.textContent = text;
+  const colors = {idle:'var(--muted)',thinking:'var(--a1)',working:'var(--a4)',done:'var(--a4)',error:'var(--red)'};
+  el.style.color = colors[state] || 'var(--muted)';
+}
+
+// ═══════════════════════════════════
+// RUN / STOP
+// ═══════════════════════════════════
+function toggleAgent() {
+  if (isRunning) {
+    stopRequested = true;
+    isRunning = false;
+    setRunBtn(false);
+    setStatus('idle', 'STOPPED');
+    return;
+  }
+  const goal = document.getElementById('goalInput').value.trim();
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!goal) { toast('Enter a goal first', 'error'); return; }
+  if (!apiKey) { toast('Add OpenRouter API key in Settings ⚙️', 'error'); return; }
+  runAgent(goal, apiKey);
+}
+
+function setRunBtn(running) {
+  isRunning = running;
+  const btn = document.getElementById('runBtn');
+  btn.textContent = running ? '■' : '▶';
+  btn.className = running ? 'run-btn stop' : 'run-btn';
+}
+
+// ═══════════════════════════════════
+// AGENT LOOP
+// ═══════════════════════════════════
+async function runAgent(goal, apiKey) {
+  stopRequested = false;
+  setRunBtn(true);
+  setStatus('thinking', 'PLANNING...');
+  clearStream();
+
+  // PLAN
+  addThought('Analyzing goal and building execution plan...');
+  let plan;
+  try {
+    plan = await makePlan(goal, apiKey);
+  } catch(e) {
+    addError('Planning failed', e.message + '\n\nTip: Check your API key in Settings and make sure it starts with sk-or-v1-');
+    setStatus('error', 'ERROR');
+    setRunBtn(false);
+    return;
+  }
+
+  if (stopRequested) return;
+  renderPlan(plan);
+  await wait(400);
+
+  // EXECUTE
+  for (let i = 0; i < plan.steps.length; i++) {
+    if (stopRequested) break;
+    setStatus('working', 'STEP ' + (i+1) + '/' + plan.steps.length);
+    await runStep(plan.steps[i], i, goal, apiKey);
+    await wait(250);
+  }
+
+  if (stopRequested) return;
+  addResult('All tasks complete!', 'Goal achieved: "' + goal.substring(0,100) + (goal.length > 100 ? '...' : '') + '"');
+  setStatus('done', 'DONE ✓');
+  setRunBtn(false);
+}
+
+// ═══════════════════════════════════
+// PLAN GENERATION
+// ═══════════════════════════════════
+async function makePlan(goal, apiKey) {
+  const persona = getPersona();
+  const sys = persona + '\n\nYou are a planning engine. Break the goal into 3-5 execution steps.\nReturn ONLY valid JSON, no markdown, no explanation:\n{"title":"short title","steps":[{"id":1,"action":"what to do","type":"think"}]}\nValid types: think, research, write, discord, send';
+
+  const raw = await callAI(apiKey, sys, 'Goal: ' + goal, 500);
+
+  // Extract JSON from response
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Model returned invalid plan format. Try again.');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch(e) {
+    throw new Error('Could not parse plan JSON. Try again.');
+  }
+
+  if (!parsed.steps || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+    throw new Error('Plan has no steps.');
+  }
+
+  return parsed;
+}
+
+// ═══════════════════════════════════
+// STEP EXECUTION
+// ═══════════════════════════════════
+async function runStep(step, idx, goal, apiKey) {
+  markStep(idx, 'active');
+
+  if (document.getElementById('sw-think').classList.contains('on')) {
+    addThought('Step ' + step.id + ': ' + step.action);
+    await wait(300);
+  }
+
+  if (stopRequested) { markStep(idx, 'error'); return; }
+
+  const typeGuide = {
+    research: 'Research this thoroughly. Present findings with bullet points, key stats, and clear insights.',
+    write: 'Write polished Discord-ready content. Use Discord markdown: **bold**, *italic*, > quote, - bullets. Add relevant emojis. Make it engaging.',
+    discord: 'Write a perfectly formatted Discord message. Use Discord markdown, emojis, clear sections. Mobile-friendly.',
+    send: 'Write the final message to post. Perfect Discord formatting with emojis and structure.',
+    think: 'Think through this step by step. Be clear and structured.'
+  };
+
+  const sys = getPersona() + '\n\nYou are executing step ' + step.id + ' of an autonomous task.\nOverall goal: "' + goal + '"\nThis step: "' + step.action + '"\n\n' + (typeGuide[step.type] || 'Complete this step thoroughly.') + '\n\nJust do the task. Do not explain what you will do first.';
+
+  let content;
+  try {
+    content = await callAI(apiKey, sys, 'Execute: ' + step.action, 900);
+  } catch(e) {
+    markStep(idx, 'error');
+    addError('Step ' + step.id + ' failed', e.message);
+    return;
+  }
+
+  if (stopRequested) { markStep(idx, 'error'); return; }
+
+  if (step.type === 'research' || step.type === 'think') {
+    addToolBlock(step.type === 'research' ? '🔍 RESEARCH' : '🧠 ANALYSIS', content);
+  } else {
+    const autoPost = document.getElementById('sw-auto').classList.contains('on');
+    if ((step.type === 'send' || step.type === 'discord') && autoPost) {
+      const ok = await sendToDiscord(content);
+      addDiscordBlock('📤 SENT TO DISCORD', content, ok);
+    } else {
+      const label = step.type === 'write' ? '✍️ CONTENT READY' : '💬 DISCORD MESSAGE';
+      addDiscordBlock(label, content, false);
+    }
+  }
+
+  markStep(idx, 'done');
+}
+
+// ═══════════════════════════════════
+// OPENROUTER API CALL
+// ═══════════════════════════════════
+async function callAI(apiKey, system, userMsg, maxTokens) {
+  const model = document.getElementById('modelSelect').value;
+
+  let res;
+  try {
+    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'HTTP-Referer': 'https://aria-agent.app',
+        'X-Title': 'ARIA Autonomous Agent'
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: maxTokens || 800,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userMsg }
+        ]
+      })
+    });
+  } catch(e) {
+    // Network error (no internet, etc.)
+    throw new Error('Network error: ' + e.message + '. Check your internet connection.');
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch(e) {
+    throw new Error('Invalid response from API (status ' + res.status + ')');
+  }
+
+  if (!res.ok) {
+    const msg = (data.error && data.error.message) || ('API error ' + res.status);
+    throw new Error(msg);
+  }
+
+  if (data.error) throw new Error(data.error.message || 'Unknown API error');
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error('Empty response from AI model. Try a different model in Settings.');
+  }
+
+  return data.choices[0].message.content.trim();
+}
+
+// ═══════════════════════════════════
+// DISCORD
+// ═══════════════════════════════════
+async function sendToDiscord(content) {
+  const webhook = document.getElementById('webhookUrl').value.trim();
+  if (!webhook) {
+    toast('Add Discord webhook URL in the Discord tab 💬', 'error');
+    return false;
+  }
+  const msg = content.length > 1990 ? content.substring(0, 1987) + '...' : content;
+  try {
+    const res = await fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: msg, username: 'ARIA Agent 🤖' })
+    });
+    if (res.ok) {
+      logMsg(content);
+      toast('Sent to Discord ✓', 'success');
+      return true;
+    }
+    toast('Webhook error: ' + res.status + '. Check your webhook URL.', 'error');
+    return false;
+  } catch(e) {
+    toast('Send failed: ' + e.message, 'error');
+    return false;
+  }
+}
+
+async function manualSend() {
+  const el = document.getElementById('manualMsg');
+  const msg = el.value.trim();
+  if (!msg) return;
+  const ok = await sendToDiscord(msg);
+  if (ok) el.value = '';
+}
+
+function logMsg(content) {
+  const log = document.getElementById('dcLog');
+  const empty = document.getElementById('dcEmpty');
+  if (empty) empty.style.display = 'none';
+  const name = document.getElementById('channelName').value || '#general';
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const item = document.createElement('div');
+  item.className = 'channel-item';
+  item.innerHTML =
+    '<div class="channel-avatar">🤖</div>' +
+    '<div class="channel-info">' +
+      '<div class="channel-name">ARIA → ' + escH(name) + '</div>' +
+      '<div class="channel-preview">' + escH(content.substring(0, 90)) + (content.length > 90 ? '...' : '') + '</div>' +
+    '</div>' +
+    '<div class="channel-time">' + time + '</div>';
+  log.insertBefore(item, log.firstChild);
+}
+
+// ═══════════════════════════════════
+// TEST
+// ═══════════════════════════════════
+async function testConnection() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const el = document.getElementById('testResult');
+  if (!apiKey) { el.textContent = '⚠️ Enter API key first'; return; }
+  el.textContent = 'Testing...';
+  el.style.color = 'var(--muted)';
+  try {
+    const result = await callAI(apiKey, 'You are a test assistant. Reply with exactly the text: ARIA ONLINE', 'Test', 20);
+    el.textContent = '✅ ' + result;
+    el.style.color = 'var(--a4)';
+    toast('Connection successful!', 'success');
+  } catch(e) {
+    el.textContent = '❌ ' + e.message;
+    el.style.color = 'var(--red)';
+  }
+}
+
+// ═══════════════════════════════════
+// RENDER
+// ═══════════════════════════════════
+function clearStream() {
+  document.getElementById('execStream').innerHTML = '';
+}
+
+function renderPlan(plan) {
+  const typeMap = {think:'tag-think',research:'tag-research',write:'tag-write',discord:'tag-discord',send:'tag-send'};
+  const typeLabel = {think:'THINK',research:'RESEARCH',write:'WRITE',discord:'DISCORD',send:'SEND'};
+
+  let stepsHTML = '';
+  plan.steps.forEach((s, i) => {
+    stepsHTML += '<div class="plan-step" id="pstep-' + i + '" style="animation-delay:' + (i * 0.07) + 's">' +
+      '<div class="step-icon" id="picon-' + i + '">' + (i+1) + '</div>' +
+      '<div class="step-text">' + escH(s.action) + '</div>' +
+      '<span class="step-tag ' + (typeMap[s.type] || 'tag-think') + '">' + (typeLabel[s.type] || 'TASK') + '</span>' +
+      '</div>';
+  });
+
+  const card = document.createElement('div');
+  card.className = 'plan-card';
+  card.innerHTML =
+    '<div class="plan-header">' +
+      '<span class="plan-header-icon">📋</span>' +
+      '<span class="plan-header-title">' + escH(plan.title) + '</span>' +
+      '<span class="plan-header-count">' + plan.steps.length + ' steps</span>' +
+    '</div>' +
+    '<div class="plan-steps">' + stepsHTML + '</div>';
+  append(card);
+}
+
+function markStep(idx, state) {
+  const el = document.getElementById('pstep-' + idx);
+  const icon = document.getElementById('picon-' + idx);
+  if (!el) return;
+  el.className = 'plan-step ' + state;
+  if (icon) {
+    if (state === 'done') icon.textContent = '✓';
+    else if (state === 'error') icon.textContent = '✕';
+    else if (state === 'active') icon.textContent = '◉';
+    else icon.textContent = String(idx + 1);
+  }
+}
+
+function addThought(text) {
+  const el = document.createElement('div');
+  el.className = 'thought-block';
+  el.innerHTML =
+    '<div class="thought-label"><div class="typing"><span></span><span></span><span></span></div>ARIA THINKING</div>' +
+    '<div class="thought-text">' + escH(text) + '</div>';
+  append(el);
+}
+
+function addToolBlock(title, content) {
+  const id = 'tool' + Date.now();
+  const el = document.createElement('div');
+  el.className = 'tool-block';
+  el.innerHTML =
+    '<div class="tool-header" onclick="toggleContent(\'' + id + '\')">' +
+      title + '<span style="margin-left:auto;opacity:0.5" id="arr' + id + '">▼</span>' +
+    '</div>' +
+    '<div class="tool-content" id="' + id + '">' + escH(content) + '</div>';
+  append(el);
+}
+
+function toggleContent(id) {
+  const el = document.getElementById(id);
+  const arr = document.getElementById('arr' + id);
+  if (!el) return;
+  const hidden = el.style.display === 'none';
+  el.style.display = hidden ? '' : 'none';
+  if (arr) arr.textContent = hidden ? '▼' : '▶';
+}
+
+function addDiscordBlock(title, content, sent) {
+  const safeContent = escH(content);
+  // Store content in a data attribute to avoid encoding issues in onclick
+  const el = document.createElement('div');
+  el.className = 'discord-block';
+  el.dataset.content = content;
+
+  const actionsHTML = sent
+    ? '<button class="action-btn sent" disabled>✓ Sent to Discord</button>' +
+      '<button class="action-btn" onclick="copyFromBlock(this)">📋 Copy</button>'
+    : '<button class="action-btn primary" onclick="sendFromBlock(this)">📤 Send to Discord</button>' +
+      '<button class="action-btn" onclick="copyFromBlock(this)">📋 Copy</button>';
+
+  el.innerHTML =
+    '<div class="discord-header">' + title + '</div>' +
+    '<div class="discord-content">' + safeContent + '</div>' +
+    '<div class="discord-actions">' + actionsHTML + '</div>';
+  append(el);
+}
+
+async function sendFromBlock(btn) {
+  const block = btn.closest('.discord-block');
+  const content = block.dataset.content;
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  const ok = await sendToDiscord(content);
+  if (ok) {
+    btn.textContent = '✓ Sent!';
+    btn.className = 'action-btn sent';
+  } else {
+    btn.textContent = '📤 Send to Discord';
+    btn.disabled = false;
+  }
+}
+
+function copyFromBlock(btn) {
+  const block = btn.closest('.discord-block');
+  const content = block.dataset.content;
+  navigator.clipboard.writeText(content)
+    .then(() => toast('Copied! ✓', 'success'))
+    .catch(() => toast('Copy failed', 'error'));
+}
+
+function addResult(title, body) {
+  const el = document.createElement('div');
+  el.className = 'result-card';
+  el.innerHTML =
+    '<div class="result-header"><span style="font-size:22px">✅</span><span class="result-title">' + escH(title) + '</span></div>' +
+    '<div class="result-body">' + escH(body) + '</div>';
+  append(el);
+}
+
+function addError(title, body) {
+  const el = document.createElement('div');
+  el.className = 'error-card';
+  el.innerHTML = '<div class="error-title">❌ ' + escH(title) + '</div>' + escH(body);
+  append(el);
+}
+
+function append(el) {
+  document.getElementById('execStream').appendChild(el);
+  setTimeout(() => {
+    const v = document.getElementById('agentView');
+    v.scrollTo({ top: v.scrollHeight, behavior: 'smooth' });
+  }, 60);
+}
+
+// ═══════════════════════════════════
+// UTILS
+// ═══════════════════════════════════
+function getPersona() {
+  return document.getElementById('agentPersona').value.trim() ||
+    'You are ARIA, an autonomous AI agent that helps with Discord lead outreach, AI research, and community management. Be concise, sharp, and effective.';
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function escH(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (type || '') + ' show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>
